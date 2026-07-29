@@ -97,3 +97,5 @@ class EventRepo(BaseRepo):
             event_seat.status = SeatStatus.reserved
             event_seat.reserved_until = reserved_until
             event_seat.booking_id = booking_id
+
+        await self.session.flush()
