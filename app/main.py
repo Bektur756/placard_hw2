@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 from app.add_event_data import add_event_data_to_db
+from app.config.httpx_client import close_httpx_clients
 from app.routes import router
 
 
@@ -12,6 +13,7 @@ from app.routes import router
 async def lifespan(app: FastAPI):
     await add_event_data_to_db()
     yield
+    await close_httpx_clients()
 
 
 app = FastAPI(title="API Афиши", lifespan=lifespan)

@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import Header, Depends
+from fastapi import Depends, Header
 
 
 def get_current_user_id(x_user_id: Annotated[int, Header()]) -> int:

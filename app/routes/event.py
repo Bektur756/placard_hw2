@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database.db import get_db_session
 from app.routes.dependency import CurrentUserId
-from app.schemas import EventRead, EventSeatRead, BookingCreate, CheckoutResponse
+from app.schemas import BookingCreate, CheckoutResponse, EventRead, EventSeatRead
+from app.service.checkout import prepare_checkout_service
 
 router = APIRouter()
 
@@ -29,10 +32,14 @@ async def prepare_checkout(
     event_id: int,
     payload: BookingCreate,
     user_id: CurrentUserId,
+    db: AsyncSession = Depends(get_db_session),
 ) -> CheckoutResponse:
     """Временно бронирует места за клиентом, возвращает итоговую стоимость
-        и возможность страховки."""
+    и возможность страховки."""
 
-    # TODO: создать бронь для выбранных мест через SELECT FOR UPDATE, и посчитать базовую стоимость.
-    # TODO: конкурентно запросить Payment API и Protection API для расчета checkout.
-    ...
+    return await prepare_checkout_service(
+        event_id=event_id,
+        seat_ids=payload.seat_ids,
+        user_id=user_id,
+        db=db,
+    )
