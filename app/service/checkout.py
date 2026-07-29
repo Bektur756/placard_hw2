@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.repository import BookingRepo, EventRepo
-from app.schemas import CheckoutResponse
+from app.schemas import CheckoutBooking, CheckoutResponse
 from app.config.httpx_client import (
     payment_client,
     protection_client,
@@ -79,11 +79,11 @@ async def prepare_checkout_service(
         )
 
         response = CheckoutResponse(
-            booking={
-                "id": booking.id,
-                "event_title": event.title,
-                "starts_at": event.starts_at,
-                "seats": [
+            booking=CheckoutBooking(
+                id=booking.id,
+                event_title=event.title,
+                starts_at=event.starts_at,
+                seats=[
                     {
                         "id": seat.id,
                         "sector": seat.sector,
@@ -93,12 +93,12 @@ async def prepare_checkout_service(
                     }
                     for event_seat, seat in seat_rows
                 ],
-                "base_amount": ticket_amount,
-                "payment_commission": booking.payment_commission,
-                "protection_price": booking.protection_price,
-                "with_protection": booking.with_protection,
-                "reserved_until": booking.reserved_until,
-            },
+                base_amount=ticket_amount,
+                payment_commission=booking.payment_commission,
+                protection_price=booking.protection_price,
+                with_protection=booking.with_protection,
+                reserved_until=booking.reserved_until,
+            ),
             payment=payment_result,
             protection=protection_result,
         )
