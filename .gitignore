@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+.ruff_cache/
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE files
+.idea/
+**/.DS_Store
+
+# Frontend generated files
+_frontend/**/dist/
+_frontend/**/node_modules/
+
+# Local delivery analytics project
+delivery_analytics/
+
+# Local compose files
+docker-compose.full.yaml
+docker-compose.delivery_analytics.yaml
