@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database.db import get_db_session
 from app.routes.dependency import CurrentUserId
 from app.schemas import EventCreate, EventRead, EventDashboard
-
+from app.service.dashboard import event_dashboard_service
 
 router = APIRouter()
 
@@ -19,8 +22,10 @@ async def create_event(payload: EventCreate, organizer_id: CurrentUserId) -> Eve
 
 
 @router.get("/organizer/events/{event_id}/dashboard")
-async def get_event_dashboard(event_id: int, organizer_id: CurrentUserId) -> EventDashboard:
+async def get_event_dashboard(
+        event_id: int,
+        organizer_id: CurrentUserId,
+        db: AsyncSession = Depends(get_db_session),
+) -> EventDashboard:
     """Возвращает аналитические данные для дашборда по мероприятию."""
-    # TODO: проверить, что мероприятие принадлежит organizer_id.
-    # TODO: конкурентно загрузить аналитику продаж и занятость мест отдельными запросами к БД.
-    ...
+    return await event_dashboard_service(event_id, organizer_id, db)

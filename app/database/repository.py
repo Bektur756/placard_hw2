@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Booking, BookingStatus, Event, EventSeat, Seat, SeatStatus
+from app.schemas import OccupancyDashboard, SalesDashboard
 
 
 class BaseRepo:
@@ -99,3 +100,76 @@ class EventRepo(BaseRepo):
             event_seat.booking_id = booking_id
 
         await self.session.flush()
+
+    async def get_event_by_id_organizer_id(self, event_id: int, organizer_id: int) -> Event | None:
+        query = (
+            select(Event)
+            .where(Event.id == event_id, Event.organizer_id == organizer_id)
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_sales_dashboard(self, event_id: int) -> SalesDashboard:
+        query = (
+            select(
+                func.count(distinct(EventSeat.booking_id)).filter(
+                    EventSeat.status == SeatStatus.sold,
+                    EventSeat.booking_id.is_not(None),
+                ),
+                func.count(EventSeat.id).filter(EventSeat.status == SeatStatus.sold),
+                func.coalesce(
+                    func.sum(EventSeat.price).filter(EventSeat.status == SeatStatus.sold),
+                    0,
+                ),
+            )
+            .where(EventSeat.event_id == event_id)
+        )
+
+        result = await self.session.execute(query)
+        paid_orders, sold_tickets, revenue = result.one()
+        average_order = revenue // paid_orders if paid_orders else 0
+
+        return SalesDashboard(
+            paid_orders=paid_orders,
+            sold_tickets=sold_tickets,
+            revenue=revenue,
+            average_order=average_order,
+        )
+
+    async def get_occupancy_dashboard(
+        self,
+        event_id: int,
+    ) -> OccupancyDashboard:
+        now = datetime.now()
+        query = (
+            select(
+                func.count(EventSeat.id),
+                func.count(EventSeat.id).filter(
+                    or_(
+                        EventSeat.status == SeatStatus.available,
+                        and_(
+                            EventSeat.status == SeatStatus.reserved,
+                            EventSeat.reserved_until <= now,
+                        ),
+                    ),
+                ),
+                func.count(EventSeat.id).filter(
+                    EventSeat.status == SeatStatus.reserved,
+                    EventSeat.reserved_until > now,
+                ),
+                func.count(EventSeat.id).filter(EventSeat.status == SeatStatus.sold),
+            )
+            .where(EventSeat.event_id == event_id)
+        )
+
+        result = await self.session.execute(query)
+        total, available, reserved, sold = result.one()
+        occupancy_percent = round(((reserved + sold) / total) * 100, 2) if total else 0
+
+        return OccupancyDashboard(
+            total=total,
+            available=available,
+            reserved=reserved,
+            sold=sold,
+            occupancy_percent=occupancy_percent,
+        )
