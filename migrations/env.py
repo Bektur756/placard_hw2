@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.config import DATABASE_URL
+from app.config.setting import DATABASE_URL
 from app.models import Base
 
 config = context.config
