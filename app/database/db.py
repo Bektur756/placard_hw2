@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config.setting import DATABASE_URL
+from app.database.repository import BookingRepo, EventRepo
 
 
 engine = create_async_engine(
@@ -66,10 +67,18 @@ class DatabaseManager:
     async def rollback(self) -> None:
         await self.session.rollback()
 
+    @property
+    def bookings(self) -> BookingRepo:
+        return BookingRepo(self.session)
+
+    @property
+    def events(self) -> EventRepo:
+        return EventRepo(self.session)
+
 
 database = Database(engine, session_maker)
 
 
-async def get_db_session  () -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with database.session() as db:
         yield db.session

@@ -1,8 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.repository import BookingRepo, EventRepo
+from app.database.db import DatabaseManager
 from app.schemas import CheckoutBooking, CheckoutResponse
 from app.config.httpx_client import (
     payment_client,
@@ -10,25 +9,25 @@ from app.config.httpx_client import (
 )
 
 
-async def prepare_checkout_service(
-    event_id: int,
-    seat_ids: list[int],
-    user_id: int,
-    db: AsyncSession,
-) -> CheckoutResponse:
-    if len(seat_ids) != len(set(seat_ids)):
-        raise HTTPException(status_code=400, detail="Seat ids must be unique")
+class CheckoutService:
+    def __init__(self, db: DatabaseManager) -> None:
+        self.db = db
 
-    booking_repo = BookingRepo(db)
-    event_repo = EventRepo(db)
+    async def prepare_checkout(
+        self,
+        event_id: int,
+        seat_ids: list[int],
+        user_id: int,
+    ) -> CheckoutResponse:
+        if len(seat_ids) != len(set(seat_ids)):
+            raise HTTPException(status_code=400, detail="Seat ids must be unique")
 
-    event = await event_repo.get_by_id(event_id)
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
+        event = await self.db.events.get_by_id(event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail="Event not found")
 
-    try:
         now = datetime.now()
-        seat_rows = await event_repo.get_event_seats(
+        seat_rows = await self.db.events.get_event_seats(
             event_id=event_id,
             seat_ids=seat_ids,
             now=now,
@@ -39,14 +38,14 @@ async def prepare_checkout_service(
         ticket_amount = sum(event_seat.price for event_seat, _ in seat_rows)
         reserved_until = now + timedelta(minutes=15)
 
-        booking = await booking_repo.create_pending(
+        booking = await self.db.bookings.create_pending(
             event.id,
             user_id,
             ticket_amount,
             reserved_until,
         )
 
-        await event_repo.reserve_event_seats(
+        await self.db.events.reserve_event_seats(
             seat_rows,
             booking.id,
             reserved_until,
@@ -72,7 +71,7 @@ async def prepare_checkout_service(
         if isinstance(protection_result, Exception):
             protection_result = None
 
-        await booking_repo.apply_quotes(
+        await self.db.bookings.apply_quotes(
             booking,
             payment_result.commission,
             protection_result.price if protection_result else None,
@@ -103,9 +102,5 @@ async def prepare_checkout_service(
             protection=protection_result,
         )
 
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-    return response
+        await self.db.commit()
+        return response
