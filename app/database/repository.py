@@ -109,6 +109,14 @@ class EventRepo(BaseRepo):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_event_by_id(self, event_id: int) -> Event | None:
+        query = (
+            select(Event)
+            .where(Event.id == event_id)
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_sales_dashboard(self, event_id: int) -> SalesDashboard:
         query = (
             select(

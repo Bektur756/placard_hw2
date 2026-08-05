@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.routes.dependency import CheckoutServiceDep, CurrentUserId
+from app.routes.dependency import CheckoutServiceDep, CurrentUserId, EventServiceRep
 from app.schemas import BookingCreate, CheckoutResponse, EventRead, EventSeatRead
 
 
@@ -13,9 +13,12 @@ async def list_events() -> list[EventRead]:
 
 
 @router.get("/events/{event_id}")
-async def get_event(event_id: int) -> EventRead:
+async def get_event(
+        event_id: int,
+        service: EventServiceRep,
+) -> EventRead:
     """Возвращает описание мероприятия."""
-    ...
+    return await service.get_event_by_id(event_id=event_id)
 
 
 @router.get("/events/{event_id}/seats")
@@ -33,7 +36,6 @@ async def prepare_checkout(
 ) -> CheckoutResponse:
     """Временно бронирует места за клиентом, возвращает итоговую стоимость
     и возможность страховки."""
-
     return await service.prepare_checkout(
         event_id=event_id,
         seat_ids=payload.seat_ids,
