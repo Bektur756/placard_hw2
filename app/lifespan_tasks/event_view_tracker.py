@@ -36,3 +36,6 @@ class EventViewTracker:
 
     async def _insert_events_to_db(self, events):
         pass
+
+
+event_view_tracker = EventViewTracker()

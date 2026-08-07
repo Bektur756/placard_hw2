@@ -2,12 +2,17 @@ import asyncio
 from redis.asyncio import Redis
 from app.database.db import DatabaseManager
 from app.exception.event import EventNotFound
-from app.lifespan_tasks import event_view_tracker
+from app.lifespan_tasks.event_view_tracker import EventViewTracker
 from app.schemas import EventRead
 
 
 class EventService:
-    def __init__(self, db: DatabaseManager, redis: Redis) -> None:
+    def __init__(
+        self,
+        db: DatabaseManager,
+        redis: Redis,
+        event_view_tracker: EventViewTracker,
+    ) -> None:
         self.db = db
         self.redis = redis
         self.event_view_tracker = event_view_tracker

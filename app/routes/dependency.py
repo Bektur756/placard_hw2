@@ -5,6 +5,7 @@ from redis.asyncio import Redis
 
 from app.config.redis_client import redis_service
 from app.database.db import DatabaseManager, database
+from app.lifespan_tasks.event_view_tracker import event_view_tracker
 from app.service.checkout import CheckoutService
 from app.service.dashboard import DashboardService
 from app.service.event import EventService
@@ -48,6 +49,10 @@ def get_event_service(
     db: Annotated[DatabaseManager, Depends(get_db)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> EventService:
-    return EventService(db=db, redis=redis)
+    return EventService(
+        db=db,
+        redis=redis,
+        event_view_tracker=event_view_tracker,
+    )
 
 EventServiceRep = Annotated[EventService, Depends(get_event_service)]
