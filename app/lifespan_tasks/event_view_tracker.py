@@ -1,5 +1,7 @@
 import asyncio
 
+from app.database.db import database
+
 
 class EventViewTracker:
     def __init__(self):
@@ -35,7 +37,13 @@ class EventViewTracker:
                 events = []
 
     async def _insert_events_to_db(self, events):
-        pass
+        event_counts = {}
+        for event in events:
+            event_counts[event] = event_counts.get(event, 0) + 1
+
+        async with database.session() as db:
+            await db.events.increment_event_views(event_counts)
+            await db.commit()
 
 
 event_view_tracker = EventViewTracker()

@@ -1,9 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import and_, distinct, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Booking, BookingStatus, Event, EventSeat, Seat, SeatStatus
+from app.models import Booking, BookingStatus, Event, EventSeat, EventView, Seat, SeatStatus
 from app.schemas import OccupancyDashboard, SalesDashboard
 
 
@@ -116,6 +117,26 @@ class EventRepo(BaseRepo):
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
+
+    async def increment_event_views(self, event_counts: dict[int, int]) -> None:
+        if not event_counts:
+            return
+
+        values = [
+            {
+                "event_id": event_id,
+                "views_count": views_count,
+            }
+            for event_id, views_count in event_counts.items()
+        ]
+        query = insert(EventView).values(values)
+        query = query.on_conflict_do_update(
+            index_elements=[EventView.event_id],
+            set_={
+                "views_count": EventView.views_count + query.excluded.views_count,
+            },
+        )
+        await self.session.execute(query)
 
     async def get_sales_dashboard(self, event_id: int) -> SalesDashboard:
         query = (
