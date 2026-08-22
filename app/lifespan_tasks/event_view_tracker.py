@@ -12,8 +12,7 @@ class EventViewTracker:
         self._worker_task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        if self._worker_task is None or self._worker_task.done():
-            self._worker_task = asyncio.create_task(self._track_events())
+        self._worker_task = asyncio.create_task(self._track_events())
 
     async def stop(self) -> None:
         if self._worker_task is None:
