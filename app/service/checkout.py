@@ -71,15 +71,6 @@ class CheckoutService:
         if isinstance(payment_result, Exception):
             raise HTTPException(status_code=502, detail="Payment service unavailable")
 
-        if not protection_result:
-            protection_result = None
-            await protection_attempt.kiq(
-                booking_id=booking.id,
-                ticket_amount=ticket_amount,
-                event_category=event.category,
-                event_starts_at=event.starts_at,
-            )
-
         await self.db.bookings.apply_quotes(
             booking,
             payment_result.commission,
@@ -112,4 +103,12 @@ class CheckoutService:
         )
 
         await self.db.commit()
+
+        if not protection_result:
+            await protection_attempt.kiq(
+                booking_id=booking.id,
+                ticket_amount=ticket_amount,
+                event_category=event.category,
+                event_starts_at=event.starts_at,
+            )
         return response

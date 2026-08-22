@@ -8,7 +8,9 @@ broker_async = RedisStreamBroker(
     url=REDIS_URL,
     queue_name="taskiq_queue",
     socket_timeout=None,
-)
+).with_middlewares(SimpleRetryMiddleware(
+    types_of_exceptions=(Exception,)
+))
 
 broker_cpu = RedisStreamBroker(
     url=REDIS_URL,
