@@ -1,10 +1,7 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.database.db import get_db_session
-from app.routes.dependency import CurrentUserId
+from fastapi import APIRouter, Request
+from app.routes.dependency import CheckoutServiceDep, CurrentUserId, EventServiceRep
 from app.schemas import BookingCreate, CheckoutResponse, EventRead, EventSeatRead
-from app.service.checkout import prepare_checkout_service
+
 
 router = APIRouter()
 
@@ -16,9 +13,17 @@ async def list_events() -> list[EventRead]:
 
 
 @router.get("/events/{event_id}")
-async def get_event(event_id: int) -> EventRead:
+async def get_event(
+    event_id: int,
+    request: Request,
+    service: EventServiceRep,
+) -> EventRead:
     """Возвращает описание мероприятия."""
-    ...
+    client_host = request.client.host if request.client else None
+    return await service.get_event_by_id(
+        event_id=event_id,
+        client_host=client_host,
+    )
 
 
 @router.get("/events/{event_id}/seats")
@@ -32,14 +37,12 @@ async def prepare_checkout(
     event_id: int,
     payload: BookingCreate,
     user_id: CurrentUserId,
-    db: AsyncSession = Depends(get_db_session),
+    service: CheckoutServiceDep,
 ) -> CheckoutResponse:
     """Временно бронирует места за клиентом, возвращает итоговую стоимость
     и возможность страховки."""
-
-    return await prepare_checkout_service(
+    return await service.prepare_checkout(
         event_id=event_id,
         seat_ids=payload.seat_ids,
         user_id=user_id,
-        db=db,
     )
