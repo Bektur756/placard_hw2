@@ -55,6 +55,9 @@ class BookingRepo(BaseRepo):
         booking.payment_commission = payment_commission
         booking.protection_price = protection_price
 
+    async def cancel(self, booking: Booking) -> None:
+        booking.status = BookingStatus.cancelled
+
 
 class EventRepo(BaseRepo):
     async def get_by_id(self, event_id: int) -> Event | None:
@@ -62,7 +65,7 @@ class EventRepo(BaseRepo):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_event_seats(
+    async def get_event_seats_with_lock(
         self,
         event_id: int,
         seat_ids: list[int],
@@ -98,6 +101,21 @@ class EventRepo(BaseRepo):
             event_seat.status = SeatStatus.reserved
             event_seat.reserved_until = reserved_until
             event_seat.booking_id = booking_id
+
+        await self.session.flush()
+
+    async def release_event_seats(
+        self,
+        seat_rows: list[tuple[EventSeat, Seat]],
+        booking_id: int,
+    ) -> None:
+        for event_seat, _ in seat_rows:
+            if event_seat.booking_id != booking_id:
+                continue
+
+            event_seat.status = SeatStatus.available
+            event_seat.reserved_until = None
+            event_seat.booking_id = None
 
         await self.session.flush()
 

@@ -22,13 +22,13 @@ async def prepare_checkout_service(
     booking_repo = BookingRepo(db)
     event_repo = EventRepo(db)
 
-    event = await event_repo.get_by_id(event_id)
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     try:
+        event = await event_repo.get_by_id(event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+
         now = datetime.now()
-        seat_rows = await event_repo.get_event_seats(
+        seat_rows = await event_repo.get_event_seats_with_lock(
             event_id=event_id,
             seat_ids=seat_ids,
             now=now,
@@ -52,60 +52,86 @@ async def prepare_checkout_service(
             reserved_until,
         )
 
-        payment_result, protection_result = await asyncio.gather(
-            payment_client.calculate(
-                booking_id=booking.id,
-                amount=ticket_amount,
-            ),
-            protection_client.calculate(
-                booking_id=booking.id,
-                ticket_amount=ticket_amount,
-                event_category=event.category,
-                event_starts_at=event.starts_at,
-            ),
-            return_exceptions=True,
-        )
-
-        if isinstance(payment_result, Exception):
-            raise HTTPException(status_code=502, detail="Payment service unavailable")
-
-        if isinstance(protection_result, Exception):
-            protection_result = None
-
-        await booking_repo.apply_quotes(
-            booking,
-            payment_result.commission,
-            protection_result.price if protection_result else None,
-        )
-
-        response = CheckoutResponse(
-            booking=CheckoutBooking(
-                id=booking.id,
-                event_title=event.title,
-                starts_at=event.starts_at,
-                seats=[
-                    {
-                        "id": seat.id,
-                        "sector": seat.sector,
-                        "row": seat.row,
-                        "number": seat.number,
-                        "price": event_seat.price,
-                    }
-                    for event_seat, seat in seat_rows
-                ],
-                base_amount=ticket_amount,
-                payment_commission=booking.payment_commission,
-                protection_price=booking.protection_price,
-                with_protection=booking.with_protection,
-                reserved_until=booking.reserved_until,
-            ),
-            payment=payment_result,
-            protection=protection_result,
-        )
-
         await db.commit()
     except Exception:
         await db.rollback()
         raise
 
-    return response
+    payment_result, protection_result = await asyncio.gather(
+        payment_client.calculate(
+            booking_id=booking.id,
+            amount=ticket_amount,
+        ),
+        protection_client.calculate(
+            booking_id=booking.id,
+            ticket_amount=ticket_amount,
+            event_category=event.category,
+            event_starts_at=event.starts_at,
+        ),
+        return_exceptions=True,
+    )
+
+    if isinstance(payment_result, Exception):
+        await _cancel_checkout_reservation(
+            booking_repo=booking_repo,
+            event_repo=event_repo,
+            booking=booking,
+            seat_rows=seat_rows,
+            db=db,
+        )
+        raise HTTPException(status_code=502, detail="Payment service unavailable")
+
+    if isinstance(protection_result, Exception):
+        protection_result = None
+
+    try:
+        await booking_repo.apply_quotes(
+            booking,
+            payment_result.commission,
+            protection_result.price if protection_result else None,
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    return CheckoutResponse(
+        booking=CheckoutBooking(
+            id=booking.id,
+            event_title=event.title,
+            starts_at=event.starts_at,
+            seats=[
+                {
+                    "id": seat.id,
+                    "sector": seat.sector,
+                    "row": seat.row,
+                    "number": seat.number,
+                    "price": event_seat.price,
+                }
+                for event_seat, seat in seat_rows
+            ],
+            base_amount=ticket_amount,
+            payment_commission=booking.payment_commission,
+            protection_price=booking.protection_price,
+            with_protection=booking.with_protection,
+            reserved_until=booking.reserved_until,
+        ),
+        payment=payment_result,
+        protection=protection_result,
+    )
+
+
+async def _cancel_checkout_reservation(
+    booking_repo: BookingRepo,
+    event_repo: EventRepo,
+    booking,
+    seat_rows,
+    db: AsyncSession,
+) -> None:
+    try:
+        await booking_repo.cancel(booking)
+        await event_repo.release_event_seats(seat_rows, booking.id)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise

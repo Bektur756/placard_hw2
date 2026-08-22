@@ -11,6 +11,8 @@ from app.schemas import EventDashboard, OccupancyDashboard, SalesDashboard
 async def event_dashboard_service(event_id: int, organizer_id: int, db: AsyncSession) -> EventDashboard:
     event_repo = EventRepo(db)
     event = await event_repo.get_event_by_id_organizer_id(event_id, organizer_id)
+    await db.commit()
+
     if not event:
         raise EventNotFound(event_id)
 
