@@ -12,8 +12,7 @@ class EventViewTracker:
         self._worker_task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        if self._worker_task is None or self._worker_task.done():
-            self._worker_task = asyncio.create_task(self._track_events())
+        self._worker_task = asyncio.create_task(self._track_events())
 
     async def stop(self) -> None:
         if self._worker_task is None:
@@ -31,21 +30,18 @@ class EventViewTracker:
             try:
                 event = await asyncio.wait_for(self.queue.get(), timeout=QUEUE_TIMEOUT)
                 if event is None:
-                    self.queue.task_done()
                     break
 
                 events.append(event)
             except asyncio.TimeoutError:
-                if events:
+                if len(events) > 0:
                     await self._insert_events_to_db(events)
                     events = []
-                continue
+                    continue
 
             if len(events) >= BATCH_SIZE:
                 await self._insert_events_to_db(events)
                 events = []
-
-            self.queue.task_done()
 
         if events:
             await self._insert_events_to_db(events)
