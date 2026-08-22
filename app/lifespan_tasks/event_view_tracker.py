@@ -8,43 +8,45 @@ QUEUE_TIMEOUT = 5
 
 class EventViewTracker:
     def __init__(self) -> None:
-        self.queue: asyncio.Queue[int | None] = asyncio.Queue()
+        self.queue: asyncio.Queue[int] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
-        self._worker_task = asyncio.create_task(self._track_events())
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(self._track_events())
 
     async def stop(self) -> None:
         if self._worker_task is None:
             return
 
-        await self.queue.put(None)
-        await self._worker_task
+        self._worker_task.cancel()
+        try:
+            await self._worker_task
+        except asyncio.CancelledError:
+            pass
 
     async def add_to_queue(self, event_id: int) -> None:
         await self.queue.put(event_id)
 
     async def _track_events(self) -> None:
         events: list[int] = []
-        while True:
-            try:
-                event = await asyncio.wait_for(self.queue.get(), timeout=QUEUE_TIMEOUT)
-                if event is None:
-                    break
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(self.queue.get(), timeout=QUEUE_TIMEOUT)
+                    events.append(event)
+                except asyncio.TimeoutError:
+                    if len(events) > 0:
+                        await self._insert_events_to_db(events)
+                        events = []
+                        continue
 
-                events.append(event)
-            except asyncio.TimeoutError:
-                if len(events) > 0:
+                if len(events) >= BATCH_SIZE:
                     await self._insert_events_to_db(events)
                     events = []
-                    continue
-
-            if len(events) >= BATCH_SIZE:
+        finally:
+            if events:
                 await self._insert_events_to_db(events)
-                events = []
-
-        if events:
-            await self._insert_events_to_db(events)
 
     async def _insert_events_to_db(self, events: list[int]) -> None:
         event_counts: dict[int, int] = {}
