@@ -67,10 +67,12 @@ async def protection_attempt(
         event_category=event_category,
         event_starts_at=event_starts_at,
     )
-    if protection_result:
-        async with database.session() as db:
-            await db.bookings.update_protection_price(
-                booking_id=booking_id,
-                protection_price=protection_result.price,
-            )
-            await db.commit()
+    if protection_result is None:
+        raise RuntimeError("Protection API calculation failed")
+
+    async with database.session() as db:
+        await db.bookings.update_protection_price(
+            booking_id=booking_id,
+            protection_price=protection_result.price,
+        )
+        await db.commit()
