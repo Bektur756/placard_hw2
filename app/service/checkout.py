@@ -29,7 +29,7 @@ class CheckoutService:
             raise HTTPException(status_code=404, detail="Event not found")
 
         now = datetime.now()
-        seat_rows = await self.db.events.get_event_seats(
+        seat_rows = await self.db.events.get_event_seats_with_lock(
             event_id=event_id,
             seat_ids=seat_ids,
             now=now,

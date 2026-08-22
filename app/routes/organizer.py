@@ -24,5 +24,4 @@ async def get_event_dashboard(
     organizer_id: CurrentUserId,
     service: DashboardServiceDep,
 ) -> EventDashboard:
-    """Возвращает аналитические данные для дашборда по мероприятию."""
     return await service.get_event_dashboard(event_id, organizer_id)
