@@ -47,6 +47,23 @@ class BookingRepo(BaseRepo):
         await self.session.flush()
         return booking
 
+    async def update_protection_price(
+            self,
+            booking_id: int,
+            protection_price: int | None,
+    ) -> None:
+        query = (
+            update(Booking)
+            .where(
+                Booking.id == booking_id,
+                Booking.status == BookingStatus.pending_payment,
+                Booking.protection_price.is_(None),
+            )
+            .values(protection_price=protection_price)
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.execute(query)
+
     async def apply_quotes(
         self,
         booking: Booking,

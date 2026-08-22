@@ -1,10 +1,11 @@
 from pathlib import Path
+
+from app.config.httpx_client import protection_client
 from app.pdf_report import generate_event_dashboard_pdf
 from datetime import datetime, timedelta
 
 from app.schemas import EventDashboard
 from app.database.db import database
-from app.service.booking import BookingService
 from app.tasks.taskiq_app import broker_cpu, broker_async
 
 
@@ -42,6 +43,34 @@ async def generate_report(
 )
 async def outdated_booking() -> None:
     async with database.session() as db:
-        service = BookingService(db)
-        await service.remove_outdated_bookings()
+        await db.bookings.remove_outdated_bookings()
         await db.commit()
+
+
+@broker_async.task(
+    task_name="protection_attempt",
+    max_retries=2,
+    retry_on_error=True,
+)
+async def protection_attempt(
+        booking_id,
+        ticket_amount,
+        event_category,
+        event_starts_at,
+) -> None:
+    if isinstance(event_starts_at, str):
+        event_starts_at = datetime.fromisoformat(event_starts_at)
+
+    protection_result = await protection_client.calculate(
+        booking_id=booking_id,
+        ticket_amount=ticket_amount,
+        event_category=event_category,
+        event_starts_at=event_starts_at,
+    )
+    if protection_result:
+        async with database.session() as db:
+            await db.bookings.update_protection_price(
+                booking_id=booking_id,
+                protection_price=protection_result.price,
+            )
+            await db.commit()
