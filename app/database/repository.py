@@ -3,7 +3,6 @@ from datetime import datetime
 from sqlalchemy import and_, delete, distinct, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import Booking, BookingStatus, Event, EventSeat, EventView, Seat, SeatStatus
 from app.schemas import OccupancyDashboard, SalesDashboard
 
@@ -66,15 +65,20 @@ class BookingRepo(BaseRepo):
 
     async def apply_quotes(
         self,
-        booking: Booking,
+        booking_id: int,
         payment_commission: int,
         protection_price: int | None,
     ) -> None:
-        booking.payment_commission = payment_commission
-        booking.protection_price = protection_price
-
-    async def cancel(self, booking: Booking) -> None:
-        booking.status = BookingStatus.cancelled
+        query = (
+            update(Booking)
+            .where(Booking.id == booking_id)
+            .values(
+                payment_commission=payment_commission,
+                protection_price=protection_price,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.execute(query)
 
     async def remove_outdated_bookings(self) -> None:
         now = datetime.now()

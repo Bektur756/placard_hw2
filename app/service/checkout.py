@@ -53,6 +53,7 @@ class CheckoutService:
             booking.id,
             reserved_until,
         )
+        await self.db.commit()
 
         payment_result, protection_result = await asyncio.gather(
             payment_client.calculate(
@@ -71,11 +72,14 @@ class CheckoutService:
         if isinstance(payment_result, Exception):
             raise HTTPException(status_code=502, detail="Payment service unavailable")
 
-        await self.db.bookings.apply_quotes(
-            booking,
-            payment_result.commission,
-            protection_result.price if protection_result else None,
-        )
+        protection_price = protection_result.price if protection_result else None
+
+        async with self.db.transaction() as db:
+            await db.bookings.apply_quotes(
+                booking.id,
+                payment_result.commission,
+                protection_price,
+            )
 
         response = CheckoutResponse(
             booking=CheckoutBooking(
@@ -93,16 +97,14 @@ class CheckoutService:
                     for event_seat, seat in seat_rows
                 ],
                 base_amount=ticket_amount,
-                payment_commission=booking.payment_commission,
-                protection_price=booking.protection_price,
+                payment_commission=payment_result.commission,
+                protection_price=protection_price,
                 with_protection=booking.with_protection,
                 reserved_until=booking.reserved_until,
             ),
             payment=payment_result,
             protection=protection_result,
         )
-
-        await self.db.commit()
 
         if not protection_result:
             await protection_attempt.kiq(
