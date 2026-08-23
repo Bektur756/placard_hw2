@@ -1,9 +1,6 @@
 import asyncio
+from app.config.setting import QUEUE_TIMEOUT, BATCH_SIZE
 from app.database.db import database
-
-
-BATCH_SIZE = 10
-QUEUE_TIMEOUT = 5
 
 
 class EventViewTracker:
