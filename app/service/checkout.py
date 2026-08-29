@@ -1,20 +1,26 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from fastapi import HTTPException
-
 from app.config.httpx_client import (
+    ExternalApiError,
     payment_client,
     protection_client,
 )
 from app.database.db import DatabaseManager
+from app.exception.checkout import (
+    DuplicateSeatIdsError,
+    PaymentUnavailableError,
+    SeatsNotAvailableError,
+)
+from app.exception.event import EventNotFound
 from app.schemas import CheckoutBooking, CheckoutResponse
-from app.tasks.taskiq_tasks import protection_attempt
+from app.service.task_publisher import TaskPublisher
 
 
 class CheckoutService:
-    def __init__(self, db: DatabaseManager) -> None:
+    def __init__(self, db: DatabaseManager, task_publisher: TaskPublisher) -> None:
         self.db = db
+        self.task_publisher = task_publisher
 
     async def prepare_checkout(
         self,
@@ -23,11 +29,11 @@ class CheckoutService:
         user_id: int,
     ) -> CheckoutResponse:
         if len(seat_ids) != len(set(seat_ids)):
-            raise HTTPException(status_code=400, detail="Seat ids must be unique")
+            raise DuplicateSeatIdsError()
 
         event = await self.db.events.get_by_id(event_id)
         if event is None:
-            raise HTTPException(status_code=404, detail="Event not found")
+            raise EventNotFound(event_id)
 
         now = datetime.now()
         seat_rows = await self.db.events.get_event_seats_with_lock(
@@ -36,7 +42,7 @@ class CheckoutService:
             now=now,
         )
         if len(seat_rows) != len(seat_ids):
-            raise HTTPException(status_code=409, detail="Some seats are not available")
+            raise SeatsNotAvailableError()
 
         ticket_amount = sum(event_seat.price for event_seat, _ in seat_rows)
         reserved_until = now + timedelta(minutes=15)
@@ -69,8 +75,12 @@ class CheckoutService:
             return_exceptions=True,
         )
 
+        if isinstance(payment_result, ExternalApiError):
+            raise PaymentUnavailableError()
         if isinstance(payment_result, Exception):
-            raise HTTPException(status_code=502, detail="Payment service unavailable")
+            raise payment_result
+        if isinstance(protection_result, Exception):
+            protection_result = None
 
         protection_price = protection_result.price if protection_result else None
 
@@ -107,7 +117,7 @@ class CheckoutService:
         )
 
         if not protection_result:
-            await protection_attempt.kiq(
+            await self.task_publisher.publish_protection_attempt(
                 booking_id=booking.id,
                 ticket_amount=ticket_amount,
                 event_category=event.category,
