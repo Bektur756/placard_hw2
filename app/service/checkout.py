@@ -9,6 +9,7 @@ from app.config.httpx_client import (
 )
 from app.database.db import DatabaseManager
 from app.schemas import CheckoutBooking, CheckoutResponse
+from app.tasks.taskiq_tasks import protection_attempt
 
 
 class CheckoutService:
@@ -29,7 +30,7 @@ class CheckoutService:
             raise HTTPException(status_code=404, detail="Event not found")
 
         now = datetime.now()
-        seat_rows = await self.db.events.get_event_seats(
+        seat_rows = await self.db.events.get_event_seats_with_lock(
             event_id=event_id,
             seat_ids=seat_ids,
             now=now,
@@ -70,9 +71,6 @@ class CheckoutService:
         if isinstance(payment_result, Exception):
             raise HTTPException(status_code=502, detail="Payment service unavailable")
 
-        if isinstance(protection_result, Exception):
-            protection_result = None
-
         await self.db.bookings.apply_quotes(
             booking,
             payment_result.commission,
@@ -105,4 +103,12 @@ class CheckoutService:
         )
 
         await self.db.commit()
+
+        if not protection_result:
+            await protection_attempt.kiq(
+                booking_id=booking.id,
+                ticket_amount=ticket_amount,
+                event_category=event.category,
+                event_starts_at=event.starts_at,
+            )
         return response

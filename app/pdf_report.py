@@ -1,6 +1,6 @@
 from datetime import datetime
+from app.schemas import EventDashboard
 from pathlib import Path
-
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -17,8 +17,6 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-
-from app.schemas import EventDashboard
 
 
 FONT_DIR = Path(__file__).parent / "assets" / "fonts"

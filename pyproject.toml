@@ -12,6 +12,8 @@ dependencies = [
     "redis>=8.1.0",
     "reportlab>=5.0.0",
     "sqlalchemy==2.0.41",
+    "taskiq>=0.12.5",
+    "taskiq-redis>=1.2.3",
     "uvicorn[standard]==0.35.0",
 ]
 

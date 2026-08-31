@@ -3,6 +3,7 @@ import asyncio
 from app.database.db import DatabaseManager
 from app.exception.event import EventNotFound
 from app.schemas import EventDashboard, OccupancyDashboard, SalesDashboard
+from app.tasks.taskiq_tasks import generate_report
 
 
 class DashboardService:
@@ -21,6 +22,13 @@ class DashboardService:
         sales_dashboard, occupancy_dashboard = await asyncio.gather(
             self._load_sales_dashboard(event_id),
             self._load_occupancy_dashboard(event_id),
+        )
+
+        await generate_report.kiq(
+            event_title=event.title,
+            starts_at=event.starts_at,
+            sales=sales_dashboard,
+            occupancy=occupancy_dashboard,
         )
 
         return EventDashboard(

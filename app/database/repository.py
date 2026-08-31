@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import and_, distinct, func, or_, select
+from sqlalchemy import and_, delete, distinct, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,23 @@ class BookingRepo(BaseRepo):
         await self.session.flush()
         return booking
 
+    async def update_protection_price(
+            self,
+            booking_id: int,
+            protection_price: int | None,
+    ) -> None:
+        query = (
+            update(Booking)
+            .where(
+                Booking.id == booking_id,
+                Booking.status == BookingStatus.pending_payment,
+                Booking.protection_price.is_(None),
+            )
+            .values(protection_price=protection_price)
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.execute(query)
+
     async def apply_quotes(
         self,
         booking: Booking,
@@ -58,6 +75,36 @@ class BookingRepo(BaseRepo):
 
     async def cancel(self, booking: Booking) -> None:
         booking.status = BookingStatus.cancelled
+
+    async def remove_outdated_bookings(self) -> None:
+        now = datetime.now()
+        expired_booking_ids = (
+            select(Booking.id)
+            .where(
+                Booking.status == BookingStatus.pending_payment,
+                Booking.reserved_until < now,
+            )
+            .cte("expired_booking_ids")
+        )
+
+        release_seats_query = (
+            update(EventSeat)
+            .where(EventSeat.booking_id.in_(select(expired_booking_ids.c.id)))
+            .values(
+                status=SeatStatus.available,
+                reserved_until=None,
+                booking_id=None,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.execute(release_seats_query)
+
+        delete_bookings_query = (
+            delete(Booking)
+            .where(Booking.id.in_(select(expired_booking_ids.c.id)))
+            .execution_options(synchronize_session=False)
+        )
+        await self.session.execute(delete_bookings_query)
 
 
 class EventRepo(BaseRepo):
