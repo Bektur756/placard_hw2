@@ -9,6 +9,8 @@ from app.lifespan_tasks.event_view_tracker import event_view_tracker
 from app.service.checkout import CheckoutService
 from app.service.dashboard import DashboardService
 from app.service.event import EventService
+from app.service.task_publisher import TaskPublisher
+from app.tasks.publisher import TaskiqTaskPublisher
 
 
 def get_current_user_id(x_user_id: Annotated[int, Header()]) -> int:
@@ -22,6 +24,10 @@ def get_redis() -> Redis:
     return redis_service.redis
 
 
+def get_task_publisher() -> TaskPublisher:
+    return TaskiqTaskPublisher()
+
+
 async def get_db() -> AsyncGenerator[DatabaseManager, None]:
     async with database.session() as db:
         yield db
@@ -29,8 +35,9 @@ async def get_db() -> AsyncGenerator[DatabaseManager, None]:
 
 def get_checkout_service(
     db: Annotated[DatabaseManager, Depends(get_db)],
+    task_publisher: Annotated[TaskPublisher, Depends(get_task_publisher)],
 ) -> CheckoutService:
-    return CheckoutService(db=db)
+    return CheckoutService(db=db, task_publisher=task_publisher)
 
 
 CheckoutServiceDep = Annotated[CheckoutService, Depends(get_checkout_service)]
@@ -38,8 +45,9 @@ CheckoutServiceDep = Annotated[CheckoutService, Depends(get_checkout_service)]
 
 def get_dashboard_service(
     db: Annotated[DatabaseManager, Depends(get_db)],
+    task_publisher: Annotated[TaskPublisher, Depends(get_task_publisher)],
 ) -> DashboardService:
-    return DashboardService(db=db)
+    return DashboardService(db=db, task_publisher=task_publisher)
 
 
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]

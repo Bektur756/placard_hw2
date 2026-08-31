@@ -3,12 +3,13 @@ import asyncio
 from app.database.db import DatabaseManager
 from app.exception.event import EventNotFound
 from app.schemas import EventDashboard, OccupancyDashboard, SalesDashboard
-from app.tasks.taskiq_tasks import generate_report
+from app.service.task_publisher import TaskPublisher
 
 
 class DashboardService:
-    def __init__(self, db: DatabaseManager) -> None:
+    def __init__(self, db: DatabaseManager, task_publisher: TaskPublisher) -> None:
         self.db = db
+        self.task_publisher = task_publisher
 
     async def get_event_dashboard(
         self,
@@ -24,19 +25,15 @@ class DashboardService:
             self._load_occupancy_dashboard(event_id),
         )
 
-        await generate_report.kiq(
+        dashboard = EventDashboard(
             event_title=event.title,
             starts_at=event.starts_at,
             sales=sales_dashboard,
             occupancy=occupancy_dashboard,
         )
+        await self.task_publisher.publish_report_generation(dashboard)
 
-        return EventDashboard(
-            event_title=event.title,
-            starts_at=event.starts_at,
-            sales=sales_dashboard,
-            occupancy=occupancy_dashboard,
-        )
+        return dashboard
 
     async def _load_sales_dashboard(self, event_id: int) -> SalesDashboard:
         async with self.db.transaction() as db:

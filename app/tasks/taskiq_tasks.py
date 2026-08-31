@@ -1,11 +1,13 @@
-from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Any
 
 from app.config.httpx_client import protection_client
-from app.pdf_report import generate_event_dashboard_pdf
-from datetime import datetime, timedelta
 
-from app.schemas import EventDashboard
 from app.database.db import database
+from app.schemas import EventDashboard
+from app.service.booking import BookingService
+from app.service.protection import ProtectionService
+from app.service.report import ReportService
 from app.tasks.taskiq_app import broker_cpu, broker_async
 
 
@@ -14,24 +16,10 @@ from app.tasks.taskiq_app import broker_cpu, broker_async
     max_retries=2,
     retry_on_error=True,
 )
-async def generate_report(
-        event_title,
-        starts_at,
-        sales,
-        occupancy,
-):
-    event_dashboard = EventDashboard.model_validate({
-        "event_title": event_title,
-        "starts_at": starts_at,
-        "sales": sales,
-        "occupancy": occupancy,
-    })
-    output_path = Path("reports") / f"{event_title}.pdf"
-    generate_event_dashboard_pdf(
-        event_dashboard,
-        output_path,
-        datetime.now()
-    )
+def generate_report(
+    dashboard: EventDashboard | dict[str, Any],
+) -> None:
+    ReportService().generate_event_dashboard_report(dashboard)
 
 
 @broker_async.task(
@@ -43,8 +31,7 @@ async def generate_report(
 )
 async def outdated_booking() -> None:
     async with database.session() as db:
-        await db.bookings.remove_outdated_bookings()
-        await db.commit()
+        await BookingService(db).remove_outdated_bookings()
 
 
 @broker_async.task(
@@ -53,26 +40,19 @@ async def outdated_booking() -> None:
     retry_on_error=True,
 )
 async def protection_attempt(
-        booking_id,
-        ticket_amount,
-        event_category,
-        event_starts_at,
+    booking_id: int,
+    ticket_amount: int,
+    event_category: str,
+    event_starts_at: datetime | str,
 ) -> None:
-    if isinstance(event_starts_at, str):
-        event_starts_at = datetime.fromisoformat(event_starts_at)
-
-    protection_result = await protection_client.calculate(
-        booking_id=booking_id,
-        ticket_amount=ticket_amount,
-        event_category=event_category,
-        event_starts_at=event_starts_at,
-    )
-    if protection_result is None:
-        raise RuntimeError("Protection API calculation failed")
-
     async with database.session() as db:
-        await db.bookings.update_protection_price(
-            booking_id=booking_id,
-            protection_price=protection_result.price,
+        service = ProtectionService(
+            db=db,
+            protection_client=protection_client,
         )
-        await db.commit()
+        await service.update_protection_price(
+            booking_id=booking_id,
+            ticket_amount=ticket_amount,
+            event_category=event_category,
+            event_starts_at=event_starts_at,
+        )
