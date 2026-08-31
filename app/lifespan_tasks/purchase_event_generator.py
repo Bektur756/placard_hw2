@@ -26,13 +26,9 @@ class PurchaseEventGenerator:
         self.producer: AIOKafkaProducer | None = None
 
     def start(self) -> None:
-        if self.task is None:
-            self.task = asyncio.create_task(self.run())
+        self.task = asyncio.create_task(self.run())
 
     async def stop(self) -> None:
-        if self.task is None:
-            return
-
         self.task.cancel()
         try:
             await self.task
